@@ -1,0 +1,82 @@
+---
+title: "20250123_RoundRobin_ANOVA"
+author: "Haley"
+date: "2025-01-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Run ANOVA on all filtered and prepared data sets (normalized and ratio) and extract:
+
+- metabolites associated with sample group
+
+# Load data
+
+```{r}
+load("../data/duplicate_input/imputed_data.RData")
+
+norm.log <- lapply(norm.impute, log2)
+```
+
+# Function for ANOVA 
+
+```{r}
+rr.anova <- function(data, meta.data, variable, comp.data){
+  # data = list of metab data from all labs
+  # meta.data = meta data including study design
+  # variable = independent variable for anova
+  # comp.data = list of metabolite meta-data 
+  
+  # basic anova function
+  
+      metab.anova <- function(metab, variable){
+        
+        model <- summary(aov(metab ~ meta.data[,c(variable)]))
+        
+        pval <- model[[1]][["Pr(>F)"]][[1]]
+        
+        return(pval)
+      
+        }
+  
+  # apply across labs
+  
+  results <- list(length(data))
+              
+  for(i in 1:length(data)){
+    
+    results[[i]] <- data.frame("feature" = row.names(comp.data[[i]]), "pvalue" = apply(data[[i]], 2, function(x) metab.anova(x, "group")))
+    
+    #names(results[[i]]) <- colnames(data[[i]])
+    
+  }
+  
+  names(results) <- names(data)
+  
+  return(results)
+  
+}
+```
+
+# Run ANOVA and adjust p-values
+
+```{r}
+anova.results <- rr.anova(norm.log, meta.data, "group", comp.found.na.filter)
+
+for(i in 1:length(anova.results)){
+  
+  anova.results[[i]]$`adj.p` <- NA
+  
+  anova.results[[i]]$`adj.p` <- p.adjust(anova.results[[i]]$pvalue, method = "fdr")
+  
+}
+```
+
+# Save results for filtering in biomarker rmd
+
+```{r}
+save(anova.results, comp.found.na.filter, file = "../data/biomarker_input/anova_features_WITH_duplicates.RData")
+```
